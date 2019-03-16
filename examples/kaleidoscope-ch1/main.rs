@@ -26,6 +26,10 @@ pub enum Token {
     Op(char),
 }
 
+fn just_char((i, c) : &(usize, char)) -> char {
+    *c
+}
+
 pub struct Lexer<'a> {
     input : &'a str,
     iter : Peekable<CharIndices<'a>>,
@@ -49,14 +53,10 @@ impl<'a> Lexer<'a> {
     /// a substring from 0th index until the last contiguous alphabetic char
     fn next_ident(&mut self) -> &str {
         let (start, _) = *self.iter.peek().unwrap();
-        let len = self.iter.by_ref()
+        let (up_to, last) = self.iter.by_ref()
                             .peeking_take_while(|(_,c)| c.is_alphabetic())
-                            .fold(0, |acc, (i,c)| acc + c.len_utf8());
-        &self.input[start .. (start + len)]
-    }
-
-    fn just_char((i, c) : &(usize, char)) -> &char {
-        c
+                            .last().unwrap();
+        &self.input[start .. (up_to + last.len_utf8())]
     }
 
     /// Removes everything from '#' up to and including '\n'
@@ -89,7 +89,7 @@ impl<'a> Lexer<'a> {
             return Ok(EOF);
         }
 
-        let result = match Lexer::just_char(self.iter.peek().unwrap()) {
+        let result = match just_char(self.iter.peek().unwrap()) {
             '#' => {
                 self.eat_comment();
                 return self.lex();
@@ -104,15 +104,21 @@ impl<'a> Lexer<'a> {
             },
             '0' ... '9' => {
                 return self.next_num();
+            },
+            other => { 
+                if other.is_alphabetic() {
+                    Ident(self.next_ident().to_owned())
+                } else {
+                    return Err("not implemented yet!");
+                }
             }
-            _ => { return Err("not implemented yet!"); }
         };
 
         Ok(result)
     }
 
-    pub fn test_peek(&mut self) -> &char {
-        Lexer::just_char(self.iter.peek().unwrap())
+    pub fn test_peek(&mut self) -> char {
+        just_char(self.iter.peek().unwrap())
     }
 }
 
