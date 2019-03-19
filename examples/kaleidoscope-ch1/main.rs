@@ -1,6 +1,7 @@
 //! Chapter 1
 
 extern crate itertools;
+extern crate nom;
 
 use std::str::CharIndices;
 use std::iter::Peekable;
@@ -8,6 +9,38 @@ use std::iter::Peekable;
 use itertools::Itertools;
 
 use Token::*;
+
+use nom::*;
+use nom::types::*;
+
+named!(lex_def<&str,Token>, map!(tag!("def"), |_| Def));
+named!(lex_extern<&str,Token>, map!(tag!("extern"), |_| Extern));
+named!(lex_num<&str,Token>, map!(double, |d| Number(d)));
+named!(lex_ident<&str,Token>, map!(alpha, |s| Ident(s.to_owned())));
+named!(lex_op<&str,Token>, map!(anychar, |c| Op(c)));
+named!(lex_comment<&str,()>, 
+    do_parse!(
+        tag!("#") >>
+        take_until_and_consume!("\n") >>
+        (())
+    )
+);
+named!(lex_tok<&str,Token>, 
+    ws!(alt!(
+        lex_def |
+        lex_extern |
+        map!(tag!("("), |_| LeftParen) |
+        map!(tag!(")"), |_| RightParen) |
+        map!(tag!(","), |_| Comma) |
+        lex_num |
+        lex_ident |
+        do_parse!(lex_comment >> res: lex_tok >> (res)) |
+        lex_op
+    ))
+);
+named!(lex_line<&str,Vec<Token>>,
+    map!(many_till!(lex_tok, tag!(";")), |(res,_)| res)
+);
 
 /// Represents a primitive syntax token
 #[derive(Debug, PartialEq)]
@@ -21,116 +54,27 @@ pub enum Token {
     // primary
     Ident(String),
     Number(f64),
+    
+    LeftParen,
+    RightParen,
+    Comma,
 
     // if unknown
     Op(char),
 }
 
-fn just_char((i, c) : &(usize, char)) -> char {
-    *c
-}
-
-pub struct Lexer<'a> {
-    input : &'a str,
-    iter : Peekable<CharIndices<'a>>,
-}
-
-impl<'a> Lexer<'a> {
-    pub fn new(input_to_ref : &'a str) -> Lexer<'a> {
-        Lexer { input: input_to_ref, 
-                iter: input_to_ref.char_indices().peekable() }
-    }
-
-    /// Skips all whitespace the Lexer is currently pointing to and returns 
-    /// the number of whitespace characters processed
-    pub fn skip_whitespace(&mut self) -> usize {
-        self.iter.by_ref()
-                    .peeking_take_while(|(_,x)| x.is_whitespace())
-                    .count()
-    }
-
-    /// Takes a string starting with an alphabetic character and returns
-    /// a substring from 0th index until the last contiguous alphabetic char
-    fn next_ident(&mut self) -> &str {
-        let (start, _) = *self.iter.peek().unwrap();
-        let (up_to, last) = self.iter.by_ref()
-                            .peeking_take_while(|(_,c)| c.is_alphabetic())
-                            .last().unwrap();
-        &self.input[start .. (up_to + last.len_utf8())]
-    }
-
-    /// Removes everything from '#' up to and including '\n'
-    /// Returns number of bytes read
-    /// Pre: self.iter.peek() returns '#'
-    fn eat_comment(&mut self) -> usize {
-        self.iter.by_ref()
-                    .take_while(|(_,c)| *c != '\n')
-                    .fold(0, |acc, (i,c)| acc + c.len_utf8())
-    }
-
-    /// Tries to lex the next number. If parsing fails, Err is returned
-    /// Pre: self.iter.peek()  is in '0' ... '9'
-    fn next_num(&mut self) -> Result<Token, &str> {
-        let (start, _) = *self.iter.peek().unwrap();
-        let len = self.iter.by_ref()
-                            .peeking_take_while(|(_,c)| c.is_numeric() || *c == '.')
-                            .fold(0, |acc, (i,c)| acc + c.len_utf8());
-        match self.input[start .. (start + len)].parse::<f64>() {
-            Ok(num) => Ok(Number(num)),
-            Err(_) => Err("Could not parse this number")
-        }
-    }
-
-    /// Tries to parse the next Token, skipping whitespace and comments
-    pub fn lex(&mut self) -> Result<Token, &str> {
-        self.skip_whitespace();
-
-        if self.iter.peek().is_none() {
-            return Ok(EOF);
-        }
-
-        let result = match just_char(self.iter.peek().unwrap()) {
-            '#' => {
-                self.eat_comment();
-                return self.lex();
-            },
-            'a' ... 'z' | 'A' ... 'Z' => {
-                let next_ident = self.next_ident();
-                match next_ident {
-                    "def" => Def,
-                    "extern" => Extern,
-                    ident => Ident(ident.to_owned()),
-                }
-            },
-            '0' ... '9' => {
-                return self.next_num();
-            },
-            other => { 
-                if other.is_alphabetic() {
-                    Ident(self.next_ident().to_owned())
-                } else {
-                    return Err("not implemented yet!");
-                }
-            }
-        };
-
-        Ok(result)
-    }
-
-    pub fn test_peek(&mut self) -> char {
-        just_char(self.iter.peek().unwrap())
-    }
-}
-
 fn main() {
-    let mut l = Lexer::new("        def #    \n extern  3.14");
-    println!("Skipping the whitespace: {}", l.skip_whitespace());
-    println!("Peek: {}", l.test_peek());
-    println!("Peek: {}", l.test_peek());
-    println!("Next token: {:?}", l.lex());
-    println!("Next token: {:?}", l.lex());
-    println!("Next token: {:?}", l.lex());
+    loop {
+        println!(">");
+        
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).unwrap();
+        while !input.contains(";") {
+            let mut next_line = String::new();
+            std::io::stdin().read_line(&mut next_line).unwrap();
+            input.push_str(next_line.as_str());
+        }
+        
+        println!("lexing: {:?}", lex_line(input.as_str()));
+    }
 }
-
-#[cfg(test)]
-mod test;
