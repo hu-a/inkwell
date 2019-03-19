@@ -30,6 +30,7 @@ libc = "0.2"
 #llvm-sys = "60.2"
 llvm-sys = { path = "../llvm-sys.rs" }
 itertools = "0.8.0"
+nom = "4.2.2"
 
 [badges]
 travis-ci = { repository = "TheDan64/inkwell" }
