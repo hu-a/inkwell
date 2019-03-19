@@ -3,19 +3,13 @@
 extern crate itertools;
 extern crate nom;
 
-use std::str::CharIndices;
-use std::iter::Peekable;
-
-use itertools::Itertools;
-
 use Token::*;
 
 use nom::*;
-use nom::types::*;
 
 named!(lex_def<&str,Token>, map!(tag!("def"), |_| Def));
 named!(lex_extern<&str,Token>, map!(tag!("extern"), |_| Extern));
-named!(lex_num<&str,Token>, map!(double, |d| Number(d)));
+named!(lex_num<&str,Token>, map!(double, |d| Num(d)));
 named!(lex_ident<&str,Token>, map!(alpha, |s| Ident(s.to_owned())));
 named!(lex_op<&str,Token>, map!(anychar, |c| Op(c)));
 named!(lex_comment<&str,()>, 
@@ -53,7 +47,7 @@ pub enum Token {
 
     // primary
     Ident(String),
-    Number(f64),
+    Num(f64),
     
     LeftParen,
     RightParen,
@@ -78,3 +72,6 @@ fn main() {
         println!("lexing: {:?}", lex_line(input.as_str()));
     }
 }
+
+#[cfg(test)]
+mod test;
